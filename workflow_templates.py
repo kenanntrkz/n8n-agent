@@ -658,19 +658,26 @@ WORKFLOW_TEMPLATES: Dict[str, Dict[str, Any]] = {
 # ============================================================================
 
 def create_node(key: str, name: str, position: List[int], custom_params: Dict = None) -> Dict:
-    """Create a single n8n node from the registry."""
-    if key not in NODE_REGISTRY:
-        raise ValueError(f"Unknown node type: {key}")
+    """Create a single n8n node from the registry. Falls back to basic node for unknown keys."""
+    if key in NODE_REGISTRY:
+        node_def = NODE_REGISTRY[key]
+        params = {**node_def["default_params"]}
+        node_type = node_def["type"]
+    else:
+        # Fallback: try to construct a valid n8n type from the key
+        params = {}
+        if key.startswith("n8n-nodes-base.") or key.startswith("@n8n/"):
+            node_type = key
+        else:
+            node_type = f"n8n-nodes-base.{key}"
 
-    node_def = NODE_REGISTRY[key]
-    params = {**node_def["default_params"]}
     if custom_params:
         params.update(custom_params)
 
     node = {
         "id": str(uuid.uuid4()),
         "name": name,
-        "type": node_def["type"],
+        "type": node_type,
         "position": position,
         "parameters": params,
         "typeVersion": 1,

@@ -70,27 +70,45 @@ class DeployRequest(BaseModel):
 
 # --- AI ---
 
-SYSTEM_PROMPT = """Sen bir n8n otomasyon uzmanissin. Kullanicinin istegini n8n workflow JSON'ina donusturursun.
+def build_system_prompt():
+    """Build system prompt dynamically from NODE_REGISTRY."""
+    node_keys = sorted(NODE_REGISTRY.keys())
+    node_list = "\n".join(f"  - {k}: {NODE_REGISTRY[k]['description']}" for k in node_keys)
+    return f"""Sen bir n8n otomasyon uzmanissin. Kullanicinin istegini n8n workflow JSON'ina donusturursun.
+Turkce ve Ingilizce istekleri anlayabilirsin.
 
-CIKTI FORMATI - sadece bu JSON'u dondur, baska bir sey yazma:
-{
-  "workflow_name": "Adi",
-  "description": "Ne yapar",
+KURALLAR:
+1. SADECE asagidaki "key" degerlerini kullan. Baska key kullanma.
+2. Her node icin "key" (asagidaki listeden), "name" (aciklayici isim) ve "params" (opsiyonel parametreler) ver.
+3. "connections" listesinde node index'lerini kullan: [[0,1],[1,2]] gibi.
+4. Cevabinda SADECE JSON olsun, aciklama veya markdown yazma.
+
+CIKTI FORMATI:
+{{
+  "workflow_name": "Workflow Adi",
+  "description": "Ne yapar (1 cumle)",
   "nodes": [
-    {"key": "webhook", "name": "Trigger", "params": {}},
-    {"key": "http_request", "name": "API Call", "params": {"url": "...", "method": "POST"}}
+    {{"key": "schedule", "name": "Her Gun Calistir", "params": {{}}}},
+    {{"key": "http_request", "name": "API Cagir", "params": {{"url": "https://example.com", "method": "GET"}}}}
   ],
   "connections": [[0, 1], [1, 2]],
-  "tags": ["tag1"],
-  "setup_notes": "Kurulum notlari",
+  "tags": ["tag1", "tag2"],
+  "setup_notes": "Kullanicinin yapmas gereken ayarlar (credential ekleme, URL degistirme vs.)",
   "estimated_complexity": "low|medium|high"
-}
+}}
 
-Node tipleri: webhook, schedule, manual, telegram_trigger, email_trigger,
-http_request, set, code, if, switch, wait, filter, merge, aggregate,
-openai_chat, telegram_send, slack, gmail_send, google_sheets, notion,
-postgres, mysql, redis, github, shopify, stripe, discord, whatsapp,
-read_binary_file, write_binary_file, html_extract, rss_feed"""
+KULLANILABILIR NODE TIPLERI (sadece bunlari kullan):
+{node_list}
+
+ONEMLI:
+- Trigger node'u her zaman ilk sirada olmali (index 0).
+- Email gondermek icin email_send (SMTP) veya gmail_send (Gmail API) kullan.
+- AI islemleri icin openai_chat kullan.
+- Telegram mesaj gondermek icin telegram_send, almak icin telegram_trigger kullan.
+- Her workflow en az 2 node icermeli.
+- params icinde n8n expression kullanabilirsin: ={{{{ $json.field }}}}"""
+
+SYSTEM_PROMPT = build_system_prompt()
 
 
 def call_ai(prompt: str, api_key: str, provider: str = "anthropic") -> str:
@@ -190,8 +208,9 @@ async def chat(req: ChatRequest):
             connections_list=[tuple(c) for c in spec.get("connections", [])],
             tags=spec.get("tags", []),
         )
-    except Exception:
+    except Exception as e:
         wf_json = None
+        print(f"[WARN] build_custom_workflow failed: {e}")
 
     msg = f"""## {spec.get('workflow_name', 'Workflow')}
 
