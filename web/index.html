@@ -94,7 +94,7 @@
     <div class="config">
       <div class="field">
         <label>API Endpoint</label>
-        <input type="text" id="apiUrl" value="http://localhost:8000" placeholder="http://localhost:8000 or Modal URL">
+        <input type="text" id="apiUrl" value="" placeholder="Leave empty for auto-detect">
       </div>
       <div class="field-sm">
         <label>AI Provider</label>
@@ -170,7 +170,7 @@
       { file: 'youtube-automation-simple.json', name: 'YouTube Viral Factory', desc: 'Apify viral arama, AI script, fal.ai video, FFmpeg birlestirme, YouTube upload', tags: ['youtube','ai','video'] },
     ];
 
-    function getBaseUrl() { return document.getElementById('apiUrl').value.replace(/\/$/, ''); }
+    function getBaseUrl() { const v = document.getElementById('apiUrl').value.trim(); return v ? v.replace(/\/$/, '') : ''; }
     function setPrompt(t) { document.getElementById('prompt').value = t; document.getElementById('prompt').focus(); }
 
     function clearAll() {
