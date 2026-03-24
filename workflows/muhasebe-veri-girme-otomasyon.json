@@ -1,0 +1,299 @@
+{
+  "name": "Muhasebe Veri Girme Otomasyonu - %30 Zaman Tasarrufu",
+  "nodes": [
+    {
+      "id": "t1",
+      "name": "Email Geldi",
+      "type": "n8n-nodes-base.emailReadImap",
+      "position": [200, 300],
+      "parameters": {
+        "mailbox": "INBOX",
+        "options": {
+          "customEmailConfig": { "allowUnauthorizedCerts": true }
+        }
+      },
+      "typeVersion": 2,
+      "notes": "Muhasebe email'ine gelen fatura/makbuz PDF'lerini otomatik okur"
+    },
+    {
+      "id": "t2",
+      "name": "Webhook - Manuel Yukle",
+      "type": "n8n-nodes-base.webhook",
+      "position": [200, 500],
+      "parameters": {
+        "path": "fatura-yukle",
+        "httpMethod": "POST",
+        "options": { "rawBody": true },
+        "responseMode": "responseNode"
+      },
+      "typeVersion": 2,
+      "notes": "Muhasebeci fatura PDF/foto'sunu manuel yukler"
+    },
+
+    {
+      "id": "a1",
+      "name": "PDF mi Kontrol",
+      "type": "n8n-nodes-base.if",
+      "position": [480, 400],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.attachments ? true : false }}",
+              "rightValue": "true",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "typeVersion": 2
+    },
+
+    {
+      "id": "b1",
+      "name": "Claude - Fatura Oku",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [740, 400],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-20250514\",\n  \"max_tokens\": 1500,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Bu fatura/makbuz bilgilerini JSON olarak cikar. Sadece JSON dondur:\\n{\\\"belge_tipi\\\": \\\"fatura|makbuz|dekont\\\",\\\"tarih\\\": \\\"GG.AA.YYYY\\\",\\\"belge_no\\\": \\\"\\\",\\\"firma_adi\\\": \\\"\\\",\\\"firma_vkn\\\": \\\"\\\",\\\"alt_toplam\\\": 0,\\\"kdv_orani\\\": 0,\\\"kdv_tutari\\\": 0,\\\"toplam\\\": 0,\\\"para_birimi\\\": \\\"TRY\\\",\\\"kalemler\\\": [{\\\"aciklama\\\": \\\"\\\",\\\"miktar\\\": 0,\\\"birim_fiyat\\\": 0,\\\"tutar\\\": 0}],\\\"odeme_durumu\\\": \\\"bekliyor\\\",\\\"kategori\\\": \\\"gider|gelir\\\"}\\n\\nFatura icerigi:\\n{{ $json.text || $json.body || $json.content || JSON.stringify($json) }}\"\n  }]\n}",
+        "options": { "timeout": 30000 }
+      },
+      "typeVersion": 4,
+      "notes": "Claude AI fatura/makbuzu okuyup yapılandırılmış veri çıkarır"
+    },
+    {
+      "id": "b2",
+      "name": "JSON Parse",
+      "type": "n8n-nodes-base.set",
+      "position": [1000, 400],
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            { "id": "p1", "name": "fatura_data", "value": "={{ JSON.parse($json.content[0].text) }}", "type": "string" }
+          ]
+        }
+      },
+      "typeVersion": 3
+    },
+
+    {
+      "id": "c1",
+      "name": "Google Sheets - Kaydet",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [1260, 300],
+      "parameters": {
+        "operation": "append",
+        "documentId": { "mode": "url", "value": "GOOGLE_SHEETS_URL_BURAYA" },
+        "sheetName": { "mode": "name", "value": "Faturalar" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Tarih": "={{ $json.fatura_data.tarih }}",
+            "Belge No": "={{ $json.fatura_data.belge_no }}",
+            "Belge Tipi": "={{ $json.fatura_data.belge_tipi }}",
+            "Firma": "={{ $json.fatura_data.firma_adi }}",
+            "VKN": "={{ $json.fatura_data.firma_vkn }}",
+            "Alt Toplam": "={{ $json.fatura_data.alt_toplam }}",
+            "KDV %": "={{ $json.fatura_data.kdv_orani }}",
+            "KDV Tutar": "={{ $json.fatura_data.kdv_tutari }}",
+            "Toplam": "={{ $json.fatura_data.toplam }}",
+            "Para Birimi": "={{ $json.fatura_data.para_birimi }}",
+            "Kategori": "={{ $json.fatura_data.kategori }}",
+            "Odeme Durumu": "={{ $json.fatura_data.odeme_durumu }}",
+            "Islem Tarihi": "={{ new Date().toLocaleDateString('tr-TR') }}"
+          }
+        },
+        "options": {}
+      },
+      "typeVersion": 4,
+      "notes": "Fatura verilerini Muhasebe tablosuna otomatik yazar"
+    },
+    {
+      "id": "c2",
+      "name": "Aylik Ozet Hesapla",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1260, 500],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-20250514\",\n  \"max_tokens\": 500,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Bu fatura verisi icin muhasebe kategorisi ve KDV beyani notu olustur. Kisa tut:\\n{{ JSON.stringify($json.fatura_data) }}\"\n  }]\n}",
+        "options": { "timeout": 15000 }
+      },
+      "typeVersion": 4,
+      "notes": "KDV beyanı için not ve kategori önerisi üretir"
+    },
+
+    {
+      "id": "d1",
+      "name": "Bildirim Gonder",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1520, 400],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $env.TELEGRAM_CHAT_ID }}\",\n  \"text\": \"📄 Yeni Fatura Islendi\\n\\n🏢 {{ $('JSON Parse').item.json.fatura_data.firma_adi }}\\n📋 {{ $('JSON Parse').item.json.fatura_data.belge_no }}\\n💰 {{ $('JSON Parse').item.json.fatura_data.toplam }} {{ $('JSON Parse').item.json.fatura_data.para_birimi }}\\n📊 KDV: %{{ $('JSON Parse').item.json.fatura_data.kdv_orani }}\\n\\n{{ $json.content ? $json.content[0].text.substring(0,200) : '' }}\\n\\n✅ Google Sheets'e kaydedildi.\",\n  \"parse_mode\": \"HTML\"\n}",
+        "options": {}
+      },
+      "typeVersion": 4,
+      "notes": "Muhasebeciye Telegram'dan bildirim gönderir"
+    },
+    {
+      "id": "d2",
+      "name": "Webhook Cevap",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [1740, 400],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {success: true, firma: $('JSON Parse').item.json.fatura_data.firma_adi, toplam: $('JSON Parse').item.json.fatura_data.toplam} }}"
+      },
+      "typeVersion": 1
+    },
+
+    {
+      "id": "s1",
+      "name": "Haftalik KDV Raporu",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [200, 750],
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 9 * * FRI" }]
+        }
+      },
+      "typeVersion": 1.2,
+      "notes": "Her Cuma 09:00'da haftalık rapor çıkarır"
+    },
+    {
+      "id": "s2",
+      "name": "Sheets'den Haftalik Veri",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [480, 750],
+      "parameters": {
+        "operation": "read",
+        "documentId": { "mode": "url", "value": "GOOGLE_SHEETS_URL_BURAYA" },
+        "sheetName": { "mode": "name", "value": "Faturalar" },
+        "options": {}
+      },
+      "typeVersion": 4
+    },
+    {
+      "id": "s3",
+      "name": "Claude - Rapor Olustur",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [740, 750],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-20250514\",\n  \"max_tokens\": 1000,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Bu hafta girilen faturalarin ozetini cikar. Toplam gelir, toplam gider, KDV toplami, odenecek/alinacak faturalar listesi. Turkce ve kisa tut:\\n{{ JSON.stringify($json) }}\"\n  }]\n}",
+        "options": { "timeout": 30000 }
+      },
+      "typeVersion": 4
+    },
+    {
+      "id": "s4",
+      "name": "Raporu Telegram'a Gonder",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1000, 750],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $env.TELEGRAM_CHAT_ID }}\",\n  \"text\": \"📊 HAFTALIK MUHASEBE RAPORU\\n━━━━━━━━━━━━━━━\\n\\n{{ $json.content[0].text }}\",\n  \"parse_mode\": \"HTML\"\n}",
+        "options": {}
+      },
+      "typeVersion": 4
+    },
+
+    {
+      "id": "note1",
+      "name": "ACIKLAMA",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [150, 50],
+      "parameters": {
+        "content": "## 📄 Muhasebe Veri Girme Otomasyonu\n\n**Ne yapar:**\n- Email'e gelen faturaları otomatik okur (PDF/foto)\n- AI ile fatura verilerini çıkarır (firma, tutar, KDV, tarih...)\n- Google Sheets'e otomatik yazar\n- Muhasebeciye Telegram bildirimi gönderir\n- Her Cuma haftalık KDV özet raporu çıkarır\n\n**Tasarruf:** Manuel veri girişinin %30'unu otomatize eder\n\n**Gerekli:**\n- ANTHROPIC_API_KEY (env variable)\n- TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID (env variable)\n- Google Sheets credential\n- Email IMAP credential"
+      },
+      "typeVersion": 1
+    }
+  ],
+
+  "connections": {
+    "Email Geldi": {
+      "main": [[{"node": "PDF mi Kontrol", "type": "main", "index": 0}]]
+    },
+    "Webhook - Manuel Yukle": {
+      "main": [[{"node": "PDF mi Kontrol", "type": "main", "index": 0}]]
+    },
+    "PDF mi Kontrol": {
+      "main": [
+        [{"node": "Claude - Fatura Oku", "type": "main", "index": 0}],
+        []
+      ]
+    },
+    "Claude - Fatura Oku": {
+      "main": [[{"node": "JSON Parse", "type": "main", "index": 0}]]
+    },
+    "JSON Parse": {
+      "main": [[
+        {"node": "Google Sheets - Kaydet", "type": "main", "index": 0},
+        {"node": "Aylik Ozet Hesapla", "type": "main", "index": 0}
+      ]]
+    },
+    "Aylik Ozet Hesapla": {
+      "main": [[{"node": "Bildirim Gonder", "type": "main", "index": 0}]]
+    },
+    "Bildirim Gonder": {
+      "main": [[{"node": "Webhook Cevap", "type": "main", "index": 0}]]
+    },
+    "Haftalik KDV Raporu": {
+      "main": [[{"node": "Sheets'den Haftalik Veri", "type": "main", "index": 0}]]
+    },
+    "Sheets'den Haftalik Veri": {
+      "main": [[{"node": "Claude - Rapor Olustur", "type": "main", "index": 0}]]
+    },
+    "Claude - Rapor Olustur": {
+      "main": [[{"node": "Raporu Telegram'a Gonder", "type": "main", "index": 0}]]
+    }
+  },
+
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": ["muhasebe", "fatura", "kdv", "otomasyon", "ai"]
+}

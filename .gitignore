@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.env
+.env.local
+*.db
+exports/
+test_workflow_output.json
+generated_workflow.json
+.modal/
+node_modules/
+.DS_Store
+.claude/

@@ -1,0 +1,383 @@
+{
+  "name": "YouTube Viral Factory - Simple",
+  "nodes": [
+    {
+      "id": "a1",
+      "name": "Manuel Baslat",
+      "type": "n8n-nodes-base.manualTrigger",
+      "position": [200, 400],
+      "parameters": {},
+      "typeVersion": 1
+    },
+    {
+      "id": "a2",
+      "name": "Ayarlar",
+      "type": "n8n-nodes-base.set",
+      "position": [420, 400],
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            { "id": "1", "name": "niche", "value": "motivation", "type": "string" },
+            { "id": "2", "name": "style", "value": "cinematic motivation with epic music", "type": "string" },
+            { "id": "3", "name": "scene_count", "value": "4", "type": "string" },
+            { "id": "4", "name": "duration", "value": "60", "type": "string" }
+          ]
+        }
+      },
+      "typeVersion": 3
+    },
+
+    {
+      "id": "b1",
+      "name": "Apify - Viral Ara",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [640, 400],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/bernardo~youtube-scraper/runs?waitForFinish=120",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"searchKeywords\": \"{{ $json.niche }} viral shorts 2026\",\n  \"maxResults\": 10,\n  \"sortBy\": \"viewCount\",\n  \"type\": \"video\",\n  \"videoDuration\": \"short\"\n}",
+        "options": { "timeout": 180000 }
+      },
+      "typeVersion": 4
+    },
+    {
+      "id": "b2",
+      "name": "Apify - Sonuclar",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [860, 400],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.apify.com/v2/datasets/{{ $json.data.defaultDatasetId }}/items?limit=10",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "typeVersion": 4
+    },
+
+    {
+      "id": "c1",
+      "name": "Claude - Script Yaz",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1080, 400],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-20250514\",\n  \"max_tokens\": 2000,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Trending videos: {{ JSON.stringify($json.slice(0,5).map(v=>v.title)) }}\\n\\nCreate a {{ $('Ayarlar').item.json.scene_count }}-scene YouTube video concept. Style: {{ $('Ayarlar').item.json.style }}.\\n\\nReturn ONLY this JSON, no markdown:\\n{\\\"title\\\":\\\"...\\\",\\\"description\\\":\\\"...\\\",\\\"tags\\\":[...],\\\"voiceover\\\":\\\"full script\\\",\\\"music_prompt\\\":\\\"background music description\\\",\\\"thumbnail_prompt\\\":\\\"image prompt\\\",\\\"scenes\\\":[{\\\"prompt\\\":\\\"visual description for AI video\\\"}]}\"\n  }]\n}",
+        "options": { "timeout": 60000 }
+      },
+      "typeVersion": 4
+    },
+    {
+      "id": "c2",
+      "name": "JSON Parse",
+      "type": "n8n-nodes-base.code",
+      "position": [1300, 400],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "let t = items[0].json.content[0].text;\nt = t.replace(/```json\\n?/g,'').replace(/```/g,'').trim();\nreturn [{json: JSON.parse(t)}];"
+      },
+      "typeVersion": 2
+    },
+
+    {
+      "id": "d0",
+      "name": "Sahne Listesi",
+      "type": "n8n-nodes-base.splitOut",
+      "position": [1520, 400],
+      "parameters": {
+        "fieldToSplitOut": "scenes",
+        "options": { "include": "allOtherFields" }
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "d1",
+      "name": "fal - Video Uret",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1740, 400],
+      "parameters": {
+        "method": "POST",
+        "url": "https://fal.run/fal-ai/minimax/video-01-live",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Authorization", "value": "=Key {{ $env.FAL_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"prompt\": \"{{ $json.prompt }}. Cinematic 4K, smooth motion.\",\n  \"prompt_optimizer\": true\n}",
+        "options": { "timeout": 600000 }
+      },
+      "typeVersion": 4
+    },
+    {
+      "id": "d2",
+      "name": "Video URL Al",
+      "type": "n8n-nodes-base.set",
+      "position": [1960, 400],
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            { "id": "v1", "name": "video_url", "value": "={{ $json.video.url }}", "type": "string" }
+          ]
+        }
+      },
+      "typeVersion": 3
+    },
+
+    {
+      "id": "e1",
+      "name": "Videolari Topla",
+      "type": "n8n-nodes-base.aggregate",
+      "position": [2180, 400],
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "videos",
+        "options": {}
+      },
+      "typeVersion": 1
+    },
+
+    {
+      "id": "f1",
+      "name": "fal - Seslendirme",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [2400, 280],
+      "parameters": {
+        "method": "POST",
+        "url": "https://fal.run/fal-ai/f5-tts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Authorization", "value": "=Key {{ $env.FAL_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"gen_text\": \"{{ $json.videos[0].voiceover }}\",\n  \"ref_audio_url\": \"https://cdn.fal.ai/files/rabbit/GaXBvhEjv-z2DJWXQX5IZ_sample_voice.wav\",\n  \"model_type\": \"F5-TTS\",\n  \"remove_silence\": true\n}",
+        "options": { "timeout": 120000 }
+      },
+      "typeVersion": 4
+    },
+    {
+      "id": "f2",
+      "name": "fal - Muzik",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [2400, 480],
+      "parameters": {
+        "method": "POST",
+        "url": "https://fal.run/fal-ai/stable-audio",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Authorization", "value": "=Key {{ $env.FAL_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"prompt\": \"{{ $json.videos[0].music_prompt }}. No vocals, background only, 70 seconds.\",\n  \"seconds_total\": 70,\n  \"steps\": 100\n}",
+        "options": { "timeout": 120000 }
+      },
+      "typeVersion": 4
+    },
+    {
+      "id": "f3",
+      "name": "fal - Thumbnail",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [2400, 680],
+      "parameters": {
+        "method": "POST",
+        "url": "https://fal.run/fal-ai/flux/schnell",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Authorization", "value": "=Key {{ $env.FAL_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"prompt\": \"{{ $json.videos[0].thumbnail_prompt }}. YouTube thumbnail, bold, vibrant, 1280x720\",\n  \"image_size\": {\"width\": 1280, \"height\": 720},\n  \"num_images\": 1\n}",
+        "options": { "timeout": 60000 }
+      },
+      "typeVersion": 4
+    },
+
+    {
+      "id": "g1",
+      "name": "Birlestir",
+      "type": "n8n-nodes-base.merge",
+      "position": [2680, 400],
+      "parameters": {
+        "mode": "combine",
+        "mergeByPosition": true,
+        "options": {}
+      },
+      "typeVersion": 3
+    },
+
+    {
+      "id": "h1",
+      "name": "Download ve Birlestir",
+      "type": "n8n-nodes-base.executeCommand",
+      "position": [2900, 400],
+      "parameters": {
+        "command": "=cd /tmp && {{ $json.videos.map((v,i) => `curl -sL \"${v.video_url}\" -o s${i}.mp4`).join(' && ') }} && curl -sL \"{{ $json.audio_url || $json.audio?.url || '' }}\" -o voice.wav && curl -sL \"{{ $json.audio_file?.url || '' }}\" -o music.wav && printf \"{{ $json.videos.map((v,i) => `file 's${i}.mp4'`).join('\\n') }}\" > list.txt && ffmpeg -y -f concat -safe 0 -i list.txt -c:v libx264 -preset fast /tmp/merged.mp4 && ffmpeg -y -i voice.wav -i music.wav -filter_complex \"[0]volume=1[v];[1]volume=0.25[m];[v][m]amix=inputs=2:duration=first\" /tmp/mix.wav && ffmpeg -y -i /tmp/merged.mp4 -i /tmp/mix.wav -c:v copy -c:a aac -shortest /tmp/final.mp4"
+      },
+      "typeVersion": 1
+    },
+
+    {
+      "id": "i1",
+      "name": "Dosya Oku",
+      "type": "n8n-nodes-base.readWriteFile",
+      "position": [3120, 400],
+      "parameters": {
+        "operation": "read",
+        "fileName": "/tmp/final.mp4",
+        "options": {}
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "i2",
+      "name": "YouTube Yukle",
+      "type": "n8n-nodes-base.youTube",
+      "position": [3340, 400],
+      "parameters": {
+        "resource": "video",
+        "operation": "upload",
+        "title": "={{ $('JSON Parse').item.json.title }}",
+        "description": "={{ $('JSON Parse').item.json.description }}",
+        "categoryId": "22",
+        "privacyStatus": "private",
+        "tags": "={{ $('JSON Parse').item.json.tags.join(',') }}",
+        "options": {}
+      },
+      "typeVersion": 1
+    },
+
+    {
+      "id": "j1",
+      "name": "Sheets Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [3560, 400],
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "mode": "url", "value": "SHEETS_URL_BURAYA" },
+        "sheetName": { "mode": "name", "value": "Log" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Tarih": "={{ new Date().toISOString() }}",
+            "Baslik": "={{ $('JSON Parse').item.json.title }}",
+            "YouTube_ID": "={{ $json.id }}",
+            "Durum": "private"
+          }
+        },
+        "options": {}
+      },
+      "typeVersion": 4
+    },
+
+    {
+      "id": "note1",
+      "name": "ACIKLAMA",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [150, 100],
+      "parameters": {
+        "content": "## 🎬 YouTube Viral Factory - Simple\n\n**Akis:** Apify → Claude → fal.ai → FFmpeg → YouTube\n\n**Credentials gerekli:**\n- Apify API Key (HTTP Header Auth)\n- FAL_KEY (Environment Variable)\n- ANTHROPIC_API_KEY (Environment Variable)\n- YouTube OAuth2\n- Google Sheets OAuth2\n\n**n8n sunucusunda gerekli:** ffmpeg, curl"
+      },
+      "typeVersion": 1
+    }
+  ],
+
+  "connections": {
+    "Manuel Baslat": {
+      "main": [[{"node": "Ayarlar", "type": "main", "index": 0}]]
+    },
+    "Ayarlar": {
+      "main": [[{"node": "Apify - Viral Ara", "type": "main", "index": 0}]]
+    },
+    "Apify - Viral Ara": {
+      "main": [[{"node": "Apify - Sonuclar", "type": "main", "index": 0}]]
+    },
+    "Apify - Sonuclar": {
+      "main": [[{"node": "Claude - Script Yaz", "type": "main", "index": 0}]]
+    },
+    "Claude - Script Yaz": {
+      "main": [[{"node": "JSON Parse", "type": "main", "index": 0}]]
+    },
+    "JSON Parse": {
+      "main": [[{"node": "Sahne Listesi", "type": "main", "index": 0}]]
+    },
+    "Sahne Listesi": {
+      "main": [[{"node": "fal - Video Uret", "type": "main", "index": 0}]]
+    },
+    "fal - Video Uret": {
+      "main": [[{"node": "Video URL Al", "type": "main", "index": 0}]]
+    },
+    "Video URL Al": {
+      "main": [[{"node": "Videolari Topla", "type": "main", "index": 0}]]
+    },
+    "Videolari Topla": {
+      "main": [[
+        {"node": "fal - Seslendirme", "type": "main", "index": 0},
+        {"node": "fal - Muzik", "type": "main", "index": 0},
+        {"node": "fal - Thumbnail", "type": "main", "index": 0}
+      ]]
+    },
+    "fal - Seslendirme": {
+      "main": [[{"node": "Birlestir", "type": "main", "index": 0}]]
+    },
+    "fal - Muzik": {
+      "main": [[{"node": "Birlestir", "type": "main", "index": 1}]]
+    },
+    "fal - Thumbnail": {
+      "main": [[{"node": "Birlestir", "type": "main", "index": 2}]]
+    },
+    "Birlestir": {
+      "main": [[{"node": "Download ve Birlestir", "type": "main", "index": 0}]]
+    },
+    "Download ve Birlestir": {
+      "main": [[{"node": "Dosya Oku", "type": "main", "index": 0}]]
+    },
+    "Dosya Oku": {
+      "main": [[{"node": "YouTube Yukle", "type": "main", "index": 0}]]
+    },
+    "YouTube Yukle": {
+      "main": [[{"node": "Sheets Log", "type": "main", "index": 0}]]
+    }
+  },
+
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "executionTimeout": 1800
+  },
+  "tags": ["youtube", "viral", "simple"]
+}

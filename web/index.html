@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>n8n Workflow Generator</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e0e0e0; min-height: 100vh; }
+    .container { max-width: 960px; margin: 0 auto; padding: 24px; }
+    h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
+    h1 span { color: #ff6d5a; }
+    .subtitle { color: #888; font-size: 14px; margin-bottom: 24px; }
+
+    .config { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+    .config label { font-size: 12px; color: #888; display: block; margin-bottom: 4px; }
+    .config input, .config select { background: #1a1a1a; border: 1px solid #333; color: #e0e0e0; padding: 8px 12px; border-radius: 8px; font-size: 14px; width: 100%; }
+    .config input:focus, .config select:focus { outline: none; border-color: #ff6d5a; }
+    .config .field { flex: 1; min-width: 200px; }
+    .config .field-sm { width: 120px; flex: none; }
+
+    textarea { width: 100%; min-height: 100px; background: #1a1a1a; border: 1px solid #333; color: #e0e0e0; padding: 16px; border-radius: 12px; font-size: 15px; resize: vertical; font-family: inherit; line-height: 1.5; margin-bottom: 12px; }
+    textarea:focus { outline: none; border-color: #ff6d5a; }
+    textarea::placeholder { color: #555; }
+
+    .examples { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .chip { padding: 6px 14px; background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 20px; font-size: 12px; color: #aaa; cursor: pointer; transition: all 0.15s; }
+    .chip:hover { border-color: #ff6d5a; color: #ff6d5a; }
+
+    .actions { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    button { padding: 10px 24px; border-radius: 10px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+    .btn-primary { background: #ff6d5a; color: #fff; }
+    .btn-primary:hover { background: #ff8a7a; transform: translateY(-1px); }
+    .btn-primary:disabled { background: #4a2a25; color: #888; cursor: wait; transform: none; }
+    .btn-secondary { background: #222; color: #ccc; border: 1px solid #333; }
+    .btn-secondary:hover { background: #2a2a2a; }
+
+    .loading { display: none; align-items: center; gap: 12px; padding: 20px; color: #888; }
+    .loading.show { display: flex; }
+    .spinner { width: 20px; height: 20px; border: 2px solid #333; border-top-color: #ff6d5a; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .status { padding: 8px 16px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; display: none; }
+    .status.error { display: block; background: #2a1515; border: 1px solid #5a2020; color: #ff8888; }
+    .status.success { display: block; background: #152a15; border: 1px solid #205a20; color: #88ff88; }
+
+    .output { margin-top: 8px; }
+    .output-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 8px; flex-wrap: wrap; }
+    .output-header h2 { font-size: 18px; }
+    .output-actions { display: flex; gap: 8px; }
+
+    .tabs { display: flex; gap: 4px; background: #111; border-radius: 10px; padding: 4px; margin-bottom: 16px; }
+    .tab { padding: 8px 16px; border-radius: 8px; font-size: 13px; cursor: pointer; color: #888; border: none; background: none; }
+    .tab.active { background: #222; color: #fff; }
+
+    .result-box { background: #111; border: 1px solid #222; border-radius: 12px; padding: 16px; max-height: 500px; overflow: auto; }
+    pre { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+    .result-box.message { font-size: 14px; line-height: 1.7; }
+    .result-box.message h2 { font-size: 16px; margin: 12px 0 8px; color: #ff6d5a; }
+    .result-box.message h3 { font-size: 14px; margin: 10px 0 6px; color: #ccc; }
+    .result-box.message strong { color: #fff; }
+
+    .copy-btn { padding: 6px 16px; background: #222; border: 1px solid #333; border-radius: 8px; color: #ccc; font-size: 12px; cursor: pointer; }
+    .copy-btn:hover { background: #333; }
+    .copy-btn.copied { background: #1a3a1a; color: #5f5; border-color: #2a5a2a; }
+    .dl-btn { padding: 6px 16px; background: #1a2a3a; border: 1px solid #2a4a6a; border-radius: 8px; color: #88bbff; font-size: 12px; cursor: pointer; }
+    .dl-btn:hover { background: #2a3a5a; }
+
+    .templates-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+    .template-card { background: #151515; border: 1px solid #222; border-radius: 10px; padding: 14px; cursor: pointer; transition: all 0.15s; }
+    .template-card:hover { border-color: #ff6d5a; }
+    .template-card h3 { font-size: 14px; margin-bottom: 6px; }
+    .template-card p { font-size: 12px; color: #888; }
+    .template-card .tags { margin-top: 8px; display: flex; gap: 4px; flex-wrap: wrap; }
+    .template-card .tag { font-size: 10px; padding: 2px 8px; background: #1a1a1a; border-radius: 10px; color: #666; }
+
+    .ready-section { margin-top: 32px; padding-top: 24px; border-top: 1px solid #1a1a1a; }
+    .ready-section h2 { font-size: 18px; margin-bottom: 16px; }
+    .ready-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+    .ready-card { background: #111; border: 1px solid #222; border-radius: 12px; padding: 16px; }
+    .ready-card h3 { font-size: 14px; margin-bottom: 4px; }
+    .ready-card p { font-size: 12px; color: #888; margin-bottom: 10px; }
+    .ready-card .card-actions { display: flex; gap: 8px; }
+    .ready-card button { padding: 6px 14px; font-size: 12px; border-radius: 8px; }
+
+    footer { text-align: center; padding: 32px; color: #444; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1><span>n8n</span> Workflow Generator</h1>
+    <p class="subtitle">Describe your automation in plain text, get a ready-to-import n8n workflow JSON. <kbd>Ctrl+Enter</kbd> to generate.</p>
+
+    <div class="config">
+      <div class="field">
+        <label>API Endpoint</label>
+        <input type="text" id="apiUrl" value="http://localhost:8000" placeholder="http://localhost:8000 or Modal URL">
+      </div>
+      <div class="field-sm">
+        <label>AI Provider</label>
+        <select id="provider">
+          <option value="anthropic">Claude</option>
+          <option value="openai">OpenAI</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>API Key (optional - uses server .env if empty)</label>
+        <input type="password" id="apiKey" placeholder="sk-...">
+      </div>
+    </div>
+
+    <textarea id="prompt" placeholder="Describe your automation...&#10;&#10;Example: E-ticaretciler icin Telegram'dan stok ve siparis kontrol sistemi kur"></textarea>
+
+    <div class="examples">
+      <span class="chip" onclick="setPrompt('Telegram bot that answers questions using OpenAI and logs to Google Sheets')">Telegram AI Bot</span>
+      <span class="chip" onclick="setPrompt('When a new email arrives with an invoice PDF, extract data with AI and save to Google Sheets')">Invoice Parser</span>
+      <span class="chip" onclick="setPrompt('Monitor an API endpoint every 5 minutes, alert on Telegram if it goes down')">Uptime Monitor</span>
+      <span class="chip" onclick="setPrompt('New Shopify order triggers: update Google Sheets, send confirmation email, notify Slack')">Order Processor</span>
+      <span class="chip" onclick="setPrompt('Scrape competitor prices daily and send a summary report via email')">Price Tracker</span>
+      <span class="chip" onclick="setPrompt('Muhasebeciler icin fatura PDF okuma, veri cikarma ve Google Sheets kayit otomasyonu')">Fatura Okuyucu</span>
+    </div>
+
+    <div class="actions">
+      <button class="btn-primary" id="generateBtn" onclick="generate()">Generate Workflow</button>
+      <button class="btn-secondary" onclick="loadTemplates()">Browse Templates</button>
+      <button class="btn-secondary" onclick="clearAll()">Clear</button>
+    </div>
+
+    <div class="loading" id="loading"><div class="spinner"></div><span>Generating your workflow...</span></div>
+    <div class="status" id="status"></div>
+
+    <div class="output" id="output" style="display:none;">
+      <div class="output-header">
+        <h2>Result</h2>
+        <div class="output-actions">
+          <button class="copy-btn" onclick="copyJSON()">Copy JSON</button>
+          <button class="dl-btn" onclick="downloadJSON()">Download .json</button>
+        </div>
+      </div>
+      <div class="tabs">
+        <button class="tab active" onclick="showTab('json', this)">Workflow JSON</button>
+        <button class="tab" onclick="showTab('message', this)">Explanation</button>
+        <button class="tab" onclick="showTab('spec', this)">Spec</button>
+      </div>
+      <div id="tab-json" class="result-box"><pre id="jsonOutput"></pre></div>
+      <div id="tab-message" class="result-box message" style="display:none;"><div id="messageOutput"></div></div>
+      <div id="tab-spec" class="result-box" style="display:none;"><pre id="specOutput"></pre></div>
+    </div>
+
+    <div id="templates" style="display:none; margin-top:24px;">
+      <h2 style="margin-bottom:16px;">Templates</h2>
+      <div class="templates-grid" id="templatesGrid"></div>
+    </div>
+
+    <!-- Ready-made workflows section -->
+    <div class="ready-section">
+      <h2>Ready-Made Workflows</h2>
+      <div class="ready-grid" id="readyGrid"></div>
+    </div>
+  </div>
+
+  <footer>n8n Workflow Generator &mdash; Powered by Claude AI</footer>
+
+  <script>
+    let lastResult = null;
+
+    const READY_WORKFLOWS = [
+      { file: 'muhasebe-veri-girme-otomasyon.json', name: 'Muhasebe Veri Girme', desc: 'Fatura PDF okuma, AI veri cikarma, Google Sheets kayit, haftalik KDV raporu', tags: ['muhasebe','ai','sheets'] },
+      { file: 'eticaret-telegram-stok-kontrol.json', name: 'E-Ticaret Telegram Kontrol', desc: 'Telegram ile stok sorgula, siparis gor, fiyat guncelle, dusuk stok uyarisi', tags: ['e-ticaret','telegram','stok'] },
+      { file: 'youtube-automation-simple.json', name: 'YouTube Viral Factory', desc: 'Apify viral arama, AI script, fal.ai video, FFmpeg birlestirme, YouTube upload', tags: ['youtube','ai','video'] },
+    ];
+
+    function getBaseUrl() { return document.getElementById('apiUrl').value.replace(/\/$/, ''); }
+    function setPrompt(t) { document.getElementById('prompt').value = t; document.getElementById('prompt').focus(); }
+
+    function clearAll() {
+      document.getElementById('prompt').value = '';
+      document.getElementById('output').style.display = 'none';
+      document.getElementById('templates').style.display = 'none';
+      document.getElementById('status').className = 'status';
+      lastResult = null;
+    }
+
+    function showTab(name, btn) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.result-box').forEach(r => r.style.display = 'none');
+      if (btn) btn.classList.add('active');
+      document.getElementById('tab-' + name).style.display = 'block';
+    }
+
+    async function generate() {
+      const prompt = document.getElementById('prompt').value.trim();
+      if (!prompt) return;
+      const btn = document.getElementById('generateBtn');
+      const loading = document.getElementById('loading');
+      const status = document.getElementById('status');
+      btn.disabled = true;
+      loading.classList.add('show');
+      status.className = 'status';
+      document.getElementById('output').style.display = 'none';
+      document.getElementById('templates').style.display = 'none';
+
+      try {
+        const body = { message: prompt, provider: document.getElementById('provider').value };
+        const apiKey = document.getElementById('apiKey').value.trim();
+        if (apiKey) body.api_key = apiKey;
+
+        const res = await fetch(getBaseUrl() + '/agent/chat', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        });
+        if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || res.statusText); }
+        const data = await res.json();
+        lastResult = data;
+        document.getElementById('jsonOutput').textContent = JSON.stringify(data.workflow_json || data.workflow_spec, null, 2);
+        document.getElementById('messageOutput').innerHTML = md(data.message || '');
+        document.getElementById('specOutput').textContent = JSON.stringify(data.workflow_spec, null, 2);
+        document.getElementById('output').style.display = 'block';
+        status.className = 'status success';
+        status.textContent = 'Workflow generated! Copy or download the JSON, then import into n8n.';
+      } catch (e) {
+        status.className = 'status error';
+        status.textContent = 'Error: ' + e.message;
+      } finally {
+        btn.disabled = false;
+        loading.classList.remove('show');
+      }
+    }
+
+    async function copyJSON() {
+      if (!lastResult) return;
+      await navigator.clipboard.writeText(JSON.stringify(lastResult.workflow_json || lastResult.workflow_spec, null, 2));
+      event.target.textContent = 'Copied!';
+      event.target.classList.add('copied');
+      setTimeout(() => { event.target.textContent = 'Copy JSON'; event.target.classList.remove('copied'); }, 2000);
+    }
+
+    function downloadJSON() {
+      if (!lastResult) return;
+      const data = lastResult.workflow_json || lastResult.workflow_spec;
+      const name = (data.name || 'workflow').replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = name + '.json';
+      a.click();
+    }
+
+    async function downloadReadyWorkflow(file) {
+      try {
+        const res = await fetch('/workflows/' + file);
+        const data = await res.json();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = file;
+        a.click();
+      } catch (e) {
+        alert('Download failed: ' + e.message);
+      }
+    }
+
+    function viewReadyWorkflow(file) {
+      fetch('/workflows/' + file).then(r => r.json()).then(data => {
+        lastResult = { workflow_json: data, message: '## ' + data.name, workflow_spec: data };
+        document.getElementById('jsonOutput').textContent = JSON.stringify(data, null, 2);
+        document.getElementById('messageOutput').innerHTML = '<h2>' + data.name + '</h2><p>Ready-made workflow. Download or copy the JSON to import into n8n.</p>';
+        document.getElementById('specOutput').textContent = JSON.stringify(data, null, 2);
+        document.getElementById('output').style.display = 'block';
+        showTab('json', document.querySelector('.tab'));
+      });
+    }
+
+    async function loadTemplates() {
+      try {
+        const res = await fetch(getBaseUrl() + '/agent/templates');
+        const data = await res.json();
+        document.getElementById('templatesGrid').innerHTML = data.templates.map(t => `
+          <div class="template-card" onclick="setPrompt('Use template: ${t.key}')">
+            <h3>${t.name}</h3><p>${t.description}</p>
+            <div class="tags">${(t.tags||[]).map(tag => '<span class="tag">'+tag+'</span>').join('')}</div>
+          </div>`).join('');
+        document.getElementById('templates').style.display = 'block';
+      } catch (e) {
+        document.getElementById('status').className = 'status error';
+        document.getElementById('status').textContent = 'Could not load templates. Is the server running?';
+      }
+    }
+
+    function md(text) {
+      return text.replace(/### (.*)/g,'<h3>$1</h3>').replace(/## (.*)/g,'<h2>$1</h2>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');
+    }
+
+    // Render ready-made workflows
+    document.getElementById('readyGrid').innerHTML = READY_WORKFLOWS.map(w => `
+      <div class="ready-card">
+        <h3>${w.name}</h3><p>${w.desc}</p>
+        <div class="tags" style="margin-bottom:10px;">${w.tags.map(t => '<span class="tag">'+t+'</span>').join('')}</div>
+        <div class="card-actions">
+          <button class="btn-secondary" onclick="viewReadyWorkflow('${w.file}')">View</button>
+          <button class="dl-btn" onclick="downloadReadyWorkflow('${w.file}')">Download</button>
+        </div>
+      </div>`).join('');
+
+    document.getElementById('prompt').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) generate(); });
+  </script>
+</body>
+</html>

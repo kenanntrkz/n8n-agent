@@ -1,0 +1,378 @@
+{
+  "name": "E-Ticaret Telegram Stok ve Urun Kontrol Sistemi",
+  "nodes": [
+    {
+      "id": "t1",
+      "name": "Telegram Komut",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "position": [200, 400],
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {}
+      },
+      "typeVersion": 1.1,
+      "notes": "Telegram'dan gelen komutları dinler: /stok, /urunler, /siparis, /rapor, /fiyat"
+    },
+
+    {
+      "id": "r1",
+      "name": "Komut Ayir",
+      "type": "n8n-nodes-base.switch",
+      "position": [480, 400],
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.message.text.split(' ')[0] }}",
+        "rules": {
+          "rules": [
+            { "value2": "/stok", "output": 0 },
+            { "value2": "/urunler", "output": 1 },
+            { "value2": "/siparis", "output": 2 },
+            { "value2": "/rapor", "output": 3 },
+            { "value2": "/fiyat", "output": 4 }
+          ]
+        },
+        "fallbackOutput": 5
+      },
+      "typeVersion": 3,
+      "notes": "Komuta göre yönlendirir"
+    },
+
+    {
+      "id": "stok1",
+      "name": "Sheets - Stok Oku",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [780, 150],
+      "parameters": {
+        "operation": "read",
+        "documentId": { "mode": "url", "value": "SHEETS_URL_BURAYA" },
+        "sheetName": { "mode": "name", "value": "Stok" },
+        "options": {}
+      },
+      "typeVersion": 4,
+      "notes": "/stok [urun] - Stok durumunu sorgular"
+    },
+    {
+      "id": "stok2",
+      "name": "Stok Filtrele",
+      "type": "n8n-nodes-base.filter",
+      "position": [1040, 150],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "f1",
+              "leftValue": "={{ $json['Urun Adi'].toLowerCase() }}",
+              "rightValue": "={{ $('Telegram Komut').item.json.message.text.replace('/stok ', '').toLowerCase() }}",
+              "operator": { "type": "string", "operation": "contains" }
+            }
+          ]
+        }
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "stok3",
+      "name": "Stok Cevap",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1300, 150],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $('Telegram Komut').item.json.message.chat.id }}\",\n  \"text\": \"📦 STOK DURUMU\\n━━━━━━━━━━━━\\n{{ $json.map ? $json.map(i => `\\n🔹 ${i['Urun Adi']}\\n   Stok: ${i['Stok Adedi']} adet\\n   Fiyat: ${i['Fiyat']} TL\\n   SKU: ${i['SKU']}`).join('\\n') : '❌ Urun bulunamadi' }}\",\n  \"parse_mode\": \"HTML\"\n}"
+      },
+      "typeVersion": 4
+    },
+
+    {
+      "id": "urun1",
+      "name": "Sheets - Urunler",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [780, 300],
+      "parameters": {
+        "operation": "read",
+        "documentId": { "mode": "url", "value": "SHEETS_URL_BURAYA" },
+        "sheetName": { "mode": "name", "value": "Urunler" },
+        "options": { "range": "A:F" }
+      },
+      "typeVersion": 4,
+      "notes": "/urunler - Tüm ürünleri listeler"
+    },
+    {
+      "id": "urun2",
+      "name": "Urun Listesi Cevap",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1040, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $('Telegram Komut').item.json.message.chat.id }}\",\n  \"text\": \"🛍️ URUN LISTESI\\n━━━━━━━━━━━━\\nToplam: {{ $json.length || 0 }} urun\\n\\n{{ $json.slice ? $json.slice(0,15).map((u,i) => `${i+1}. ${u['Urun Adi']} - ${u['Fiyat']} TL (${u['Stok Adedi']} adet)`).join('\\n') : 'Veri yok' }}\"\n}"
+      },
+      "typeVersion": 4
+    },
+
+    {
+      "id": "sip1",
+      "name": "Shopify - Son Siparisler",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [780, 450],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://{{ $env.SHOPIFY_STORE }}.myshopify.com/admin/api/2024-01/orders.json?status=any&limit=10",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Shopify-Access-Token", "value": "={{ $env.SHOPIFY_TOKEN }}" }
+          ]
+        },
+        "options": {}
+      },
+      "typeVersion": 4,
+      "notes": "/siparis - Son 10 siparişi getirir. Shopify yerine WooCommerce veya kendi API'nizi kullanabilirsiniz."
+    },
+    {
+      "id": "sip2",
+      "name": "Siparis Cevap",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1040, 450],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $('Telegram Komut').item.json.message.chat.id }}\",\n  \"text\": \"🛒 SON SIPARISLER\\n━━━━━━━━━━━━\\n{{ $json.orders ? $json.orders.slice(0,10).map((o,i) => `${i+1}. #${o.order_number} - ${o.total_price} ${o.currency}\\n   ${o.financial_status} | ${o.fulfillment_status || 'bekliyor'}`).join('\\n\\n') : 'Siparis yok' }}\"\n}"
+      },
+      "typeVersion": 4
+    },
+
+    {
+      "id": "rap1",
+      "name": "Sheets - Satis Verisi",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [780, 600],
+      "parameters": {
+        "operation": "read",
+        "documentId": { "mode": "url", "value": "SHEETS_URL_BURAYA" },
+        "sheetName": { "mode": "name", "value": "Satislar" },
+        "options": {}
+      },
+      "typeVersion": 4,
+      "notes": "/rapor - AI ile günlük satış raporu üretir"
+    },
+    {
+      "id": "rap2",
+      "name": "Claude - Rapor",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1040, 600],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-20250514\",\n  \"max_tokens\": 800,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Bu satis verilerinden kisa bir gunluk rapor olustur. Toplam satis, en cok satan urun, ortalama sepet tutari, onceki gune gore degisim. Turkce, emoji kullan, kisa tut:\\n{{ JSON.stringify($json) }}\"\n  }]\n}",
+        "options": { "timeout": 20000 }
+      },
+      "typeVersion": 4
+    },
+    {
+      "id": "rap3",
+      "name": "Rapor Cevap",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1300, 600],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $('Telegram Komut').item.json.message.chat.id }}\",\n  \"text\": \"📊 GUNLUK RAPOR\\n━━━━━━━━━━━━\\n\\n{{ $json.content[0].text }}\"\n}"
+      },
+      "typeVersion": 4
+    },
+
+    {
+      "id": "fiy1",
+      "name": "Sheets - Fiyat Guncelle",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [780, 750],
+      "parameters": {
+        "operation": "update",
+        "documentId": { "mode": "url", "value": "SHEETS_URL_BURAYA" },
+        "sheetName": { "mode": "name", "value": "Urunler" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Fiyat": "={{ $('Telegram Komut').item.json.message.text.split(' ')[2] }}"
+          }
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "typeVersion": 4,
+      "notes": "/fiyat [SKU] [yeni_fiyat] - Ürün fiyatını günceller"
+    },
+    {
+      "id": "fiy2",
+      "name": "Fiyat Cevap",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1040, 750],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $('Telegram Komut').item.json.message.chat.id }}\",\n  \"text\": \"✅ Fiyat guncellendi!\\n\\nSKU: {{ $('Telegram Komut').item.json.message.text.split(' ')[1] }}\\nYeni Fiyat: {{ $('Telegram Komut').item.json.message.text.split(' ')[2] }} TL\"\n}"
+      },
+      "typeVersion": 4
+    },
+
+    {
+      "id": "help1",
+      "name": "Yardim Mesaji",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [780, 900],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $('Telegram Komut').item.json.message.chat.id }}\",\n  \"text\": \"🤖 E-Ticaret Bot Komutlari\\n━━━━━━━━━━━━━━━━━\\n\\n📦 /stok [urun adi] - Stok sorgula\\n🛍️ /urunler - Tum urunleri listele\\n🛒 /siparis - Son siparisleri gor\\n📊 /rapor - Gunluk satis raporu\\n💰 /fiyat [SKU] [fiyat] - Fiyat guncelle\\n\\n❓ Ornek: /stok tshirt\\n❓ Ornek: /fiyat SKU001 299\"\n}"
+      },
+      "typeVersion": 4,
+      "notes": "Tanınmayan komutlarda yardım mesajı gönderir"
+    },
+
+    {
+      "id": "cron1",
+      "name": "Dusuk Stok Uyarisi",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [200, 1100],
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 8 * * *" }]
+        }
+      },
+      "typeVersion": 1.2,
+      "notes": "Her sabah 08:00'de düşük stok kontrolü"
+    },
+    {
+      "id": "cron2",
+      "name": "Tum Stok Oku",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [480, 1100],
+      "parameters": {
+        "operation": "read",
+        "documentId": { "mode": "url", "value": "SHEETS_URL_BURAYA" },
+        "sheetName": { "mode": "name", "value": "Stok" },
+        "options": {}
+      },
+      "typeVersion": 4
+    },
+    {
+      "id": "cron3",
+      "name": "Dusuk Stok Filtrele",
+      "type": "n8n-nodes-base.filter",
+      "position": [740, 1100],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "f2",
+              "leftValue": "={{ parseInt($json['Stok Adedi']) }}",
+              "rightValue": 5,
+              "operator": { "type": "number", "operation": "smallerEqual" }
+            }
+          ]
+        }
+      },
+      "typeVersion": 2,
+      "notes": "Stok 5 ve altı olan ürünleri filtreler"
+    },
+    {
+      "id": "cron4",
+      "name": "Dusuk Stok Uyari Gonder",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1000, 1100],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $env.TELEGRAM_CHAT_ID }}\",\n  \"text\": \"⚠️ DUSUK STOK UYARISI\\n━━━━━━━━━━━━━━━\\n\\n{{ $json.map ? $json.map(i => `🔴 ${i['Urun Adi']} - ${i['Stok Adedi']} adet kaldi!`).join('\\n') : 'Tum stoklar yeterli ✅' }}\"\n}"
+      },
+      "typeVersion": 4
+    },
+
+    {
+      "id": "note1",
+      "name": "ACIKLAMA",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [150, 50],
+      "parameters": {
+        "content": "## 🛍️ E-Ticaret Telegram Kontrol Sistemi\n\n**Telegram Komutlari:**\n- `/stok tshirt` → Stok sorgula\n- `/urunler` → Tüm ürünleri listele\n- `/siparis` → Son siparişleri gör\n- `/rapor` → AI günlük satış raporu\n- `/fiyat SKU001 299` → Fiyat güncelle\n\n**Otomatik:**\n- Her sabah 08:00 düşük stok uyarısı\n\n**Gerekli:**\n- TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID\n- ANTHROPIC_API_KEY\n- Google Sheets credential\n- SHOPIFY_STORE + SHOPIFY_TOKEN (sipariş için)\n\n**Google Sheets Yapısı:**\n- Stok sayfası: Urun Adi | SKU | Stok Adedi | Fiyat\n- Urunler sayfası: Urun Adi | SKU | Fiyat | Kategori | Stok Adedi\n- Satislar sayfası: Tarih | Urun | Adet | Tutar"
+      },
+      "typeVersion": 1
+    }
+  ],
+
+  "connections": {
+    "Telegram Komut": {
+      "main": [[{"node": "Komut Ayir", "type": "main", "index": 0}]]
+    },
+    "Komut Ayir": {
+      "main": [
+        [{"node": "Sheets - Stok Oku", "type": "main", "index": 0}],
+        [{"node": "Sheets - Urunler", "type": "main", "index": 0}],
+        [{"node": "Shopify - Son Siparisler", "type": "main", "index": 0}],
+        [{"node": "Sheets - Satis Verisi", "type": "main", "index": 0}],
+        [{"node": "Sheets - Fiyat Guncelle", "type": "main", "index": 0}],
+        [{"node": "Yardim Mesaji", "type": "main", "index": 0}]
+      ]
+    },
+    "Sheets - Stok Oku": {
+      "main": [[{"node": "Stok Filtrele", "type": "main", "index": 0}]]
+    },
+    "Stok Filtrele": {
+      "main": [[{"node": "Stok Cevap", "type": "main", "index": 0}]]
+    },
+    "Sheets - Urunler": {
+      "main": [[{"node": "Urun Listesi Cevap", "type": "main", "index": 0}]]
+    },
+    "Shopify - Son Siparisler": {
+      "main": [[{"node": "Siparis Cevap", "type": "main", "index": 0}]]
+    },
+    "Sheets - Satis Verisi": {
+      "main": [[{"node": "Claude - Rapor", "type": "main", "index": 0}]]
+    },
+    "Claude - Rapor": {
+      "main": [[{"node": "Rapor Cevap", "type": "main", "index": 0}]]
+    },
+    "Sheets - Fiyat Guncelle": {
+      "main": [[{"node": "Fiyat Cevap", "type": "main", "index": 0}]]
+    },
+    "Dusuk Stok Uyarisi": {
+      "main": [[{"node": "Tum Stok Oku", "type": "main", "index": 0}]]
+    },
+    "Tum Stok Oku": {
+      "main": [[{"node": "Dusuk Stok Filtrele", "type": "main", "index": 0}]]
+    },
+    "Dusuk Stok Filtrele": {
+      "main": [[{"node": "Dusuk Stok Uyari Gonder", "type": "main", "index": 0}]]
+    }
+  },
+
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": ["e-ticaret", "telegram", "stok", "shopify", "otomasyon"]
+}
